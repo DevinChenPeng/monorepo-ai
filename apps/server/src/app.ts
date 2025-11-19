@@ -3,7 +3,7 @@ import type { Application } from 'express';
 import cors from 'cors';
 import { errorHandler } from './middlewares/errorHandler.js';
 import { requestLogger } from './middlewares/logger.js';
-import { responseInterceptor, responseTime, securityHeaders, sseHeaders } from './middlewares/contentType.js';
+import { responseInterceptor, responseTime, securityHeaders } from './middlewares/contentType.js';
 import userRouter from './routes/user.routes.js';
 import healthRouter from './routes/health.routes.js';
 import llmRouter from './routes/llm.routes.js';
@@ -18,7 +18,6 @@ export function createApp(): Application {
   app.use(responseTime); // 响应时间计算
   app.use(securityHeaders); // 安全头
   app.use(responseInterceptor); // 响应拦截
-  app.use(sseHeaders); // SSE 头
 
   // 中间件
   app.use(express.json());

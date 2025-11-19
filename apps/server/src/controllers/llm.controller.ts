@@ -14,16 +14,7 @@ export const getLLMTranslation = async (req: Request, res: Response, next: NextF
     }
 
     const translation = await llmInstance.translation(text, { from, to });
-
-    res.json({
-      success: true,
-      data: {
-        original: text,
-        translation,
-        from: from || '中文',
-        to,
-      },
-    });
+    res.write(translation);
   } catch (error) {
     next(error);
   }
