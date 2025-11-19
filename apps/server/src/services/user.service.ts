@@ -1,22 +1,18 @@
-import type {
-  User,
-  CreateUserDTO,
-  UpdateUserDTO,
-} from "../types/user.types.js";
+import type { User, CreateUserDTO, UpdateUserDTO } from '../types/user.types.js';
 
 // 模拟数据库
 let users: User[] = [
   {
-    id: "1",
-    name: "Alice",
-    email: "alice@example.com",
+    id: '1',
+    name: 'Alice',
+    email: 'alice@example.com',
     createdAt: new Date(),
     updatedAt: new Date(),
   },
   {
-    id: "2",
-    name: "Bob",
-    email: "bob@example.com",
+    id: '2',
+    name: 'Bob',
+    email: 'bob@example.com',
     createdAt: new Date(),
     updatedAt: new Date(),
   },
@@ -50,7 +46,9 @@ export class UserService {
     const index = users.findIndex((user) => user.id === id);
     if (index === -1) return null;
 
-    const currentUser = users[index]!;
+    const currentUser = users[index];
+    if (!currentUser) return null;
+
     const updatedUser: User = {
       id: currentUser.id,
       name: data.name ?? currentUser.name,

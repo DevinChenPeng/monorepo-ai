@@ -1,7 +1,7 @@
-import { ChatOllama } from "@langchain/ollama";
-import type { BaseMessage } from "@langchain/core/messages";
-import { HumanMessage, SystemMessage } from "@langchain/core/messages";
-import { splitTextToLines } from "./text.js";
+import { ChatOllama } from '@langchain/ollama';
+import type { BaseMessage } from '@langchain/core/messages';
+import { HumanMessage, SystemMessage } from '@langchain/core/messages';
+import { splitTextToLines } from './text.js';
 
 interface LLMConfig {
   model?: string;
@@ -18,7 +18,7 @@ interface TranslationOptions {
 class LLM extends ChatOllama {
   constructor(config: LLMConfig = {}) {
     const options: Record<string, unknown> = {
-      model: config.model || "qwen3:0.6b",
+      model: config.model || 'qwen3:0.6b',
       temperature: config.temperature ?? 0.7,
     };
 
@@ -38,17 +38,11 @@ class LLM extends ChatOllama {
    * @param options 翻译选项
    * @returns 翻译后的文本数组（按换行符分割）
    */
-  async translation(
-    text: string,
-    options: TranslationOptions
-  ): Promise<string[]> {
-    const { from = "中文", to } = options;
+  async translation(text: string, options: TranslationOptions): Promise<string[]> {
+    const { from = '中文', to } = options;
     const systemPrompt = `你是一个专业的翻译，能将${from}翻译成${to}。请只返回翻译结果，不要添加任何解释。`;
 
-    const messages: BaseMessage[] = [
-      new SystemMessage(systemPrompt),
-      new HumanMessage(text),
-    ];
+    const messages: BaseMessage[] = [new SystemMessage(systemPrompt), new HumanMessage(text)];
 
     const response = await this.invoke(messages);
     const content = response.content.toString();
@@ -92,13 +86,10 @@ class LLM extends ChatOllama {
    * @returns 总结后的文本数组（按换行符分割）
    */
   async summarize(text: string, maxLength?: number): Promise<string[]> {
-    const lengthHint = maxLength ? `，总结长度不超过${maxLength}字` : "";
+    const lengthHint = maxLength ? `，总结长度不超过${maxLength}字` : '';
     const systemPrompt = `你是一个专业的文本总结助手。请对以下内容进行总结${lengthHint}，保留关键信息。`;
 
-    const messages: BaseMessage[] = [
-      new SystemMessage(systemPrompt),
-      new HumanMessage(text),
-    ];
+    const messages: BaseMessage[] = [new SystemMessage(systemPrompt), new HumanMessage(text)];
 
     const response = await this.invoke(messages);
     const content = response.content.toString();
@@ -112,13 +103,10 @@ class LLM extends ChatOllama {
    * @returns 代码解释数组（按换行符分割）
    */
   async explainCode(code: string, language?: string): Promise<string[]> {
-    const langHint = language ? `这是${language}代码。` : "";
+    const langHint = language ? `这是${language}代码。` : '';
     const systemPrompt = `你是一个代码分析专家。${langHint}请解释以下代码的功能和实现逻辑。`;
 
-    const messages: BaseMessage[] = [
-      new SystemMessage(systemPrompt),
-      new HumanMessage(code),
-    ];
+    const messages: BaseMessage[] = [new SystemMessage(systemPrompt), new HumanMessage(code)];
 
     const response = await this.invoke(messages);
     const content = response.content.toString();
@@ -132,13 +120,10 @@ class LLM extends ChatOllama {
    * @returns 分类结果数组（按换行符分割）
    */
   async classify(text: string, categories: string[]): Promise<string[]> {
-    const categoriesList = categories.join("、");
+    const categoriesList = categories.join('、');
     const systemPrompt = `你是一个文本分类专家。请将以下文本分类到这些类别之一：${categoriesList}。只返回类别名称，不要添加解释。`;
 
-    const messages: BaseMessage[] = [
-      new SystemMessage(systemPrompt),
-      new HumanMessage(text),
-    ];
+    const messages: BaseMessage[] = [new SystemMessage(systemPrompt), new HumanMessage(text)];
 
     const response = await this.invoke(messages);
     const content = response.content.toString();
@@ -151,13 +136,9 @@ class LLM extends ChatOllama {
    * @returns 情感分析结果数组（按换行符分割）
    */
   async analyzeSentiment(text: string): Promise<string[]> {
-    const systemPrompt =
-      "你是一个情感分析专家。请分析以下文本的情感倾向，只返回：积极、消极或中性。";
+    const systemPrompt = '你是一个情感分析专家。请分析以下文本的情感倾向，只返回：积极、消极或中性。';
 
-    const messages: BaseMessage[] = [
-      new SystemMessage(systemPrompt),
-      new HumanMessage(text),
-    ];
+    const messages: BaseMessage[] = [new SystemMessage(systemPrompt), new HumanMessage(text)];
 
     const response = await this.invoke(messages);
     const content = response.content.toString();
