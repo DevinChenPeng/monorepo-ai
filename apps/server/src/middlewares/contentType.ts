@@ -12,7 +12,6 @@ export function responseInterceptor(req: Request, res: Response, next: NextFunct
     // 设置响应头
     res.setHeader('Content-Type', 'application/json;charset=UTF-8');
     res.setHeader('X-Powered-By', 'Express-AI-Server');
-    res.setHeader('X-Response-Time', Date.now().toString());
 
     // 如果响应数据没有 success 字段，自动包装
     if (data && typeof data === 'object' && !('success' in data)) {
@@ -57,11 +56,15 @@ export function securityHeaders(req: Request, res: Response, next: NextFunction)
 export function responseTime(req: Request, res: Response, next: NextFunction): void {
   const startTime = Date.now();
 
-  // 监听响应完成事件
-  res.on('finish', () => {
+  // 保存原始的 json 方法
+  const originalJson = res.json.bind(res);
+
+  // 重写 json 方法，在发送响应前设置响应时间
+  res.json = function (data: unknown): Response {
     const duration = Date.now() - startTime;
     res.setHeader('X-Response-Time', `${duration}ms`);
-  });
+    return originalJson(data);
+  };
 
   next();
 }
