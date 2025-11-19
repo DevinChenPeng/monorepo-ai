@@ -1,19 +1,53 @@
 import type { Request, Response, NextFunction } from 'express';
 
 /**
+ * 判断请求是否期望使用 SSE（Server-Sent Events）流式响应。
+ * 检测条件（任一满足即认为是 SSE 请求）：
+ * - 请求头 `Accept` 包含 `text/event-stream`
+ * - 请求体中存在 `stream: true`（适用于 JSON body 触发流式行为）
+ * - 查询参数 `?stream=1` 或 `?stream=true`
+ */
+export function isSSERequest(req: Request): boolean {
+  const accept = String(req.headers.accept || '');
+  const bodyIsStream = typeof req.body === 'object' && req.body !== null && (req.body as Record<string, unknown>)['stream'] === true;
+  const query = req.query || {};
+  const queryVal = String((query as Record<string, unknown>)['stream'] ?? '').toLowerCase();
+  const queryIsStream = queryVal === '1' || queryVal === 'true';
+
+  return accept.includes('text/event-stream') || bodyIsStream || queryIsStream;
+}
+
+/**
  * 响应拦截中间件 - 统一处理响应格式和头部
+ *
+ * 说明：
+ * - 对于 SSE 请求（通过 `isSSERequest` 判断），中间件会保留事件流响应，不会重写 `res.json`，
+ *   并会设置一些 SSE 友好的缓存头（例如 `Cache-Control: no-cache`）。
+ * - 对于普通请求，重写 `res.json`：设置 `Content-Type: application/json;charset=UTF-8`，
+ *   并在响应对象中没有 `success` 字段时自动包装为 `{ success: true, data, timestamp }`。
  */
 export function responseInterceptor(req: Request, res: Response, next: NextFunction): void {
-  // 保存原始的 json 方法
+  // 设置共享头
+  res.setHeader('X-Powered-By', 'Express-AI-Server');
+
+  const isSSE = isSSERequest(req);
+
+  if (isSSE) {
+    // 对 SSE 请求不要覆盖 Content-Type / res.json，避免破坏事件流
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Content-Type', 'text/event-stream;charset=UTF-8');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders(); // 立即发送头部
+    next();
+    return;
+  }
+
+  // 非 SSE 请求：包装 JSON 响应行为
   const originalJson = res.json.bind(res);
 
-  // 重写 json 方法
   res.json = function (data: unknown): Response {
-    // 设置响应头
     res.setHeader('Content-Type', 'application/json;charset=UTF-8');
-    res.setHeader('X-Powered-By', 'Express-AI-Server');
 
-    // 如果响应数据没有 success 字段，自动包装
     if (data && typeof data === 'object' && !('success' in data)) {
       data = {
         success: true,
@@ -22,13 +56,11 @@ export function responseInterceptor(req: Request, res: Response, next: NextFunct
       };
     }
 
-    // 调用原始的 json 方法
     return originalJson(data);
   };
 
   next();
 }
-
 /**
  * 添加安全响应头
  */
