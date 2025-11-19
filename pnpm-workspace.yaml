@@ -3,7 +3,7 @@ packages:
   - 'packages/**'
   - 'apps/**'
   - 'libs/**'
-  - 'services/**'
+  - 'server/**'
   - 'examples/**'
   - '!**/node_modules/**'
   - '!**/dist/**'
