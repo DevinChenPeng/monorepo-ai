@@ -37,6 +37,7 @@ export function responseInterceptor(req: Request, res: Response, next: NextFunct
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Content-Type', 'text/event-stream;charset=UTF-8');
     res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no'); // 禁用 nginx 缓冲
     res.flushHeaders(); // 立即发送头部
     next();
     return;
@@ -47,13 +48,14 @@ export function responseInterceptor(req: Request, res: Response, next: NextFunct
 
   res.json = function (data: unknown): Response {
     res.setHeader('Content-Type', 'application/json;charset=UTF-8');
-
     if (data && typeof data === 'object' && !('success' in data)) {
       data = {
         success: true,
         data,
         timestamp: new Date().toISOString(),
       };
+    } else if (data && typeof data === 'object') {
+      (data as Record<string, unknown>).timestamp = new Date().toISOString();
     }
 
     return originalJson(data);

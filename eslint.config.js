@@ -37,7 +37,12 @@ export default [
     rules: {
       ...tseslint.configs.recommended.rules,
       ...prettierConfig.rules,
-      'prettier/prettier': 'warn',
+      'prettier/prettier': [
+        'warn',
+        {
+          endOfLine: 'auto',
+        },
+      ],
       '@typescript-eslint/no-unused-vars': [
         'warn',
         {
