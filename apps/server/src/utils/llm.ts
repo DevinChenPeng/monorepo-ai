@@ -48,8 +48,6 @@ class LLM extends ChatOllama {
     const options: Record<string, unknown> = {
       model: config.model || 'qwen3:0.6b', // 默认使用轻量级模型
       temperature: config.temperature ?? 0.7, // 默认温度 0.7，平衡创造性和准确性
-      system: "仅输出 JSON 格式，包含 'title' 和 'content' 字段，不要多余内容",
-      format: 'json', // 指定输出格式为 JSON
     };
 
     // 只在明确传入参数时才设置，避免覆盖默认值
