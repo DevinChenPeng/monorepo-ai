@@ -1,39 +1,30 @@
+import * as dotenv from 'dotenv';
+dotenv.config();
 import { Document } from '@langchain/core/documents';
 import { SemanticSimilarityExampleSelector } from '@langchain/core/example_selectors';
 import { Chroma } from '@langchain/community/vectorstores/chroma'; // Chroma 向量存储
-import { OllamaEmbeddings } from '@langchain/ollama'; // 本地嵌入模型
-import { ChatOllama } from '@langchain/ollama'; // 可选：用于后续 Few-Shot 示例
+import { ChatOllama, OllamaEmbeddings } from '@langchain/ollama'; // 本地嵌入模型
 import { PromptTemplate } from '@langchain/core/prompts'; // 可选：用于构建提示词
 import { CallbackManager } from '@langchain/core/callbacks/manager';
-
-// 导入回调处理器（用于监听步骤）
-
+import { ChatOpenAI } from '@langchain/openai';
+const embeddings = new OllamaEmbeddings({
+  model: process.env.OLLAMA_EMBED_MODEL, // 轻量嵌入模型
+  baseUrl: process.env.OLLAMA_BASE_URL, // Ollama 服务地址
+});
 // 1. 初始化回调管理器（打印每个步骤的日志）
 const callbackManager = CallbackManager.fromHandlers({
   // 监听 LLM 生成环节（推理的核心：模型正在生成回答）
-  llmStart: (params) => {
+  handleLLMStart: (params) => {
     console.log('\n=== 推理环节：模型开始生成回答 ===');
-    console.log('输入给模型的 Prompt：', params.prompts[0]);
+    console.log('输入给模型的 Prompt：', params);
   },
   // 监听 LLM 生成结束（推理完成，即将返回回答）
-  llmEnd: (output) => {
+  handleLLMEnd: (output) => {
+    console.log('模型原始输出：', output);
     console.log('\n=== 推理环节：模型生成结束 ===');
-    console.log('模型原始输出：', output.generations[0][0].text);
-  },
-  // 监听整个链路结束（最终回答已生成）
-  chainEnd: (output) => {
-    console.log('\n=== 最终回答 ===');
-    console.log('整理后的回答：', output.text);
   },
 });
-// 3. 初始化关键组件
-// 3.1 嵌入模型（本地 Ollama，无密钥）
-const embeddings = new OllamaEmbeddings({
-  model: 'nomic-embed-text:latest', // 轻量嵌入模型
-  baseUrl: 'http://localhost:11434', // Ollama 服务地址
-});
-
-// 3.2 准备示例数据（用于筛选的样本，格式：对象数组，含输入/输出等字段）
+// 2 准备示例数据（用于筛选的样本，格式：对象数组，含输入/输出等字段）
 const examples = [
   {
     input: '如何在 Node.js 中安装 LangChain？',
@@ -57,7 +48,7 @@ const examples = [
   },
 ];
 
-// 4. 创建 Chroma 向量存储（存储示例数据的向量）
+// 3. 创建 Chroma 向量存储（存储示例数据的向量）
 const vectorStore = await Chroma.fromDocuments(
   // 将示例数据转为 Document 类（Chroma 要求输入为 Document 数组）
   examples.map(
@@ -69,50 +60,52 @@ const vectorStore = await Chroma.fromDocuments(
   ),
   embeddings, // 嵌入模型（自动将示例转为向量）
   {
-    collectionName: 'few-shot-examples', // Chroma 集合名称（类似数据库表名） 若 Chroma 已存在同名集合（collectionName），会直接复用，不会重复创建
-    url: 'http://localhost:8000', // Chroma 服务地址
-    persistDirectory: './chroma-data', // 本地 Chroma 时可选（指定数据存储路径）
+    collectionName: process.env.CHROMA_COLLECTION_NAME, // Chroma 集合名称（类似数据库表名） 若 Chroma 已存在同名集合（collectionName），会直接复用，不会重复创建
+    url: process.env.CHROMA_URL, // Chroma 服务地址
+    persistDirectory: process.env.CHROMA_PERSIST_DIR, // 本地 Chroma 时可选（指定数据存储路径）
   }
 );
-// 5. 实例化 SemanticSimilarityExampleSelector（核心步骤）
+// 4. 实例化 SemanticSimilarityExampleSelector（核心步骤）
 const exampleSelector = new SemanticSimilarityExampleSelector({
   vectorStore, // 绑定 Chroma 向量存储（示例数据存在这里）
   k: 2, // 最多返回 2 个最相似的示例
   inputKeys: ['input'], // 用于计算相似度的「查询字段」（与示例的 input 对应）
 });
 
-// 6. 筛选相似示例（核心功能）
+// 5. 筛选相似示例（核心功能）
 const userQuery = 'Chroma 数据怎么持久化到本地？'; // 用户查询
 
 await Promise.all(examples.map((item) => exampleSelector.addExample(item)));
 const selectedExamples = await exampleSelector.selectExamples({ input: userQuery });
 
-// 7. 结合 LLM 实现 Few-Shot 回答（完整落地场景）
-// 7.1 构建提示词模板（包含筛选出的示例）
+// 6. 结合 LLM 实现 Few-Shot 回答（完整落地场景）
+// 构建提示词模板（包含筛选出的示例）
 const promptTemplate = PromptTemplate.fromTemplate(`
 	参考：{examples}
-	你现在需要解决用户的问题，要求如下：
-	1. 先输出你的思考步骤（分点列出，每一步说明你的分析逻辑）；
-	2. 再输出最终的清晰回答；
-	3. 思考步骤和最终回答用明确的分隔符分开（例如：---分割线---）。
 	问题：{question}
 	`);
 
-// 7.2 格式化示例（转为自然语言文本）
+// 格式化示例（转为自然语言文本）
 const formattedExamples = selectedExamples.map((ex) => `问：${ex.input}\n答：${ex.output}`).join('\n\n');
 
-// 7.3 初始化 LLM（本地 Ollama，无密钥）
-const llm = new ChatOllama({
-  model: 'deepseek-r1:1.5b',
-  temperature: 0.3, // 降低随机性
-  think: true,
+//  初始化 LLM（使用环境变量配置）
+const llm = new ChatOpenAI({
+  model: process.env.LLM_MODEL,
+  baseUrl: process.env.LLM_BASE_URL,
+  apiKey: process.env.LLM_API_KEY,
+  streaming: true,
+  callbacks: callbackManager,
 });
+console.log(llm);
 
-// 7.4 执行链（提示词 + LLM）
+// 执行链（提示词 + LLM）
 const chain = promptTemplate.pipe(llm);
-const response = await chain.invoke({
+const response = await chain.stream({
   examples: formattedExamples,
   question: userQuery,
 });
+for await (const element of response) {
+  console.log(element);
+}
 console.log('\n=== LLM 最终回答 ===');
 console.log(response.content);
