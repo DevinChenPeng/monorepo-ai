@@ -1,47 +1,16 @@
-import type { Request, Response, NextFunction } from 'express';
+import type { Request, Response } from 'express';
 import { randomUUID } from 'node:crypto';
 import llmInstance from '../utils/llm.js';
 import { sendSSEData } from '../utils/sseTools.js';
+import { badRequestResponse, errorResponse } from '../utils/http.js';
 
-export const getLLMTranslation = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-  try {
-    const { text, from, to } = req.body;
-    console.log(req.body);
-    if (!text || !to) {
-      res.status(400).json({
-        success: false,
-        error: 'text and to are required',
-      });
-      return;
-    }
-
-    const translation = await llmInstance.translation(text, { from, to });
-    res.json({
-      success: true,
-      data: {
-        original: text,
-        translation,
-        from: from || '中文',
-        to,
-      },
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-export const getLLMChart = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+export const getLLMChart = async (req: Request, res: Response): Promise<void> => {
   try {
     const { text } = req.body;
     if (!text) {
-      res.status(400).json({
-        success: false,
-        error: 'text and to are required',
-      });
+      badRequestResponse(res);
       return;
     }
-    console.log('getLLMChart', text);
-
     // 发送连接成功消息
     sendSSEData(res, { type: 'start' });
 
