@@ -55,7 +55,7 @@ const vectorStore = await Chroma.fromDocuments(
     (example) =>
       new Document({
         pageContent: JSON.stringify(example), // 存储示例完整信息（JSON 字符串）
-        metadata: { category: example.category }, // 元数据（用于后续过滤）
+        metadata: { category: example.catgory }, // 元数据（用于后续过滤）
       })
   ),
   embeddings, // 嵌入模型（自动将示例转为向量）

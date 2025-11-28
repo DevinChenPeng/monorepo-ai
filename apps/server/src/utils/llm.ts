@@ -2,6 +2,7 @@
  * LLM 工具模块
  * 封装了基于 ChatDeepSeek 的大语言模型功能，提供流式和非流式输出
  */
+import 'dotenv/config';
 import type { AIMessageChunk, BaseMessage, MessageStructure } from '@langchain/core/messages';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { ChatDeepSeek, type ChatDeepSeekInput } from '@langchain/deepseek';

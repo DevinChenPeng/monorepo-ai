@@ -1,6 +1,8 @@
-import { Document } from '@langchain/core/documents';
+import { Document, type DocumentInterface } from '@langchain/core/documents';
 import { Chroma, type ChromaLibArgs } from '@langchain/community/vectorstores/chroma';
 import { OllamaEmbeddings } from '@langchain/ollama';
+import 'dotenv/config';
+import { ChromaClient } from 'chromadb';
 
 export interface ChromaToolboxConfig extends Omit<ChromaLibArgs, 'index'> {
   /** 指定集合名称，不同 collection 互相隔离 */
@@ -27,10 +29,13 @@ export class ChromaToolbox {
   private readonly embeddings: OllamaEmbeddings;
 
   /** 延迟初始化的向量存储 */
-  private vectorStorePromise: Promise<Chroma> | null = null;
+  private vectorStorePromise: Chroma | null = null;
 
   /** 默认检索条数 */
   private readonly defaultK: number;
+
+  /** ChromaClient 实例 */
+  private readonly chromaClient: ChromaClient;
 
   constructor(config: ChromaToolboxConfig) {
     this.config = config;
@@ -41,11 +46,13 @@ export class ChromaToolbox {
         baseUrl: process.env.OLLAMA_BASE_URL ?? 'http://localhost:11434',
       });
     this.defaultK = config.defaultK ?? 4;
+    this.chromaClient = new ChromaClient();
   }
 
   /**
-   * 快速使用环境变量创建 Toolbox。
-   * 支持通过 overrides 覆盖部分参数，常用于服务启动时统一配置。
+   * @description: 快速使用环境变量创建 Toolbox。
+   * @param {Partial<ChromaToolboxConfig>} overrides
+   * @return {ChromaToolbox}
    */
   static fromEnv(overrides: Partial<ChromaToolboxConfig> = {}) {
     const baseConfig: ChromaToolboxConfig = {
@@ -62,19 +69,60 @@ export class ChromaToolbox {
     return new ChromaToolbox(baseConfig);
   }
 
-  private ensureVectorStore() {
+  /**
+   * @description: 将任意对象数组转换为 Document 数组
+   * @template T
+   * @param {T[]} items
+   * @param {(item: T, index: number) => Record<string, unknown>} metadataSelector
+   * @return {Document[]}
+   */
+  static toDocuments<T extends Record<string, unknown>>(
+    items: T[],
+    metadataSelector?: (item: T, index: number) => Record<string, unknown>
+  ): Document[] {
+    return items.map(
+      (item, index) =>
+        new Document({
+          pageContent: JSON.stringify(item),
+          metadata: metadataSelector?.(item, index) ?? {},
+        })
+    );
+  }
+
+  /**
+   * @description: 确保向量存储已初始化
+   * @return {Chroma}
+   */
+  private ensureVectorStore(): Chroma {
     if (!this.vectorStorePromise) {
-      this.vectorStorePromise = Chroma.fromTexts([], [], this.embeddings, this.config);
+      // // 创建/连接 Chroma 集合，并绑定 Ollama 嵌入函数
+      this.vectorStorePromise = new Chroma(
+        this.embeddings, // 嵌入模型（自动将示例转为向量）
+        this.config // 配置（包含集合名称、URL 等）
+      );
     }
     return this.vectorStorePromise;
   }
 
-  async addDocuments(documents: Document[]) {
-    const store = await this.ensureVectorStore();
+  /**
+   * @description: 添加文档
+   * @param {Document[]} documents
+   * @return {Promise<void>}
+   */
+  async addDocuments(documents: Document[]): Promise<void> {
+    const store = this.ensureVectorStore();
+    console.dir(this);
+
     await store.addDocuments(documents);
   }
 
-  async addTexts(texts: string[], metadatas?: Record<string, unknown>[]) {
+  /**
+   * @description: 添加文本
+   * @param {string[]} texts
+   * @param {Record<string, unknown>[]} metadatas
+   * @return {Promise<void>}
+   */
+  async addTexts(texts: string[], metadatas?: Record<string, unknown>[]): Promise<void> {
     const documents = texts.map(
       (text, index) =>
         new Document({
@@ -85,13 +133,40 @@ export class ChromaToolbox {
     await this.addDocuments(documents);
   }
 
-  async similaritySearch(query: string, k = this.defaultK) {
-    const store = await this.ensureVectorStore();
+  /**
+   * @description: 相似度检索
+   * @param {string} query
+   * @param {number} k
+   * @return {Promise<DocumentInterface[]>}
+   */
+  async similaritySearch(query: string, k: number = this.defaultK): Promise<DocumentInterface[]> {
+    const store = this.ensureVectorStore();
     return store.similaritySearch(query, k);
   }
 
-  async similaritySearchWithScore(query: string, k = this.defaultK) {
-    const store = await this.ensureVectorStore();
+  /**
+   * @description: 相似度检索并返回得分
+   * @param {string} query
+   * @param {number} k
+   * @return {Promise<[DocumentInterface, number][]>}
+   */
+  async similaritySearchWithScore(query: string, k: number = this.defaultK): Promise<[DocumentInterface, number][]> {
+    const store = this.ensureVectorStore();
     return store.similaritySearchWithScore(query, k);
+  }
+  /**
+   * @description: 删除集合
+   * @return {Promise<void>}
+   */
+  async deleteCollection(): Promise<void> {
+    if (!this.chromaClient) {
+      throw new Error('ChromaClient not initialized');
+    }
+    try {
+      await this.chromaClient.deleteCollection({ name: this.config.collectionName });
+    } catch (error) {
+      console.error('Error deleting collection:', error);
+      throw error;
+    }
   }
 }
