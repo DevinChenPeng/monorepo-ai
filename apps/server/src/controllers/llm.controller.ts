@@ -1,9 +1,9 @@
 import type { Request, Response } from 'express';
 import { randomUUID } from 'node:crypto';
-import llmInstance from '../utils/llm.js';
-import { sendSSEData } from '../utils/sseTools.js';
-import { badRequestResponse, errorResponse } from '../utils/http.js';
-
+import llmInstance from '../utils/langchain/llm.js';
+import { sendSSEData } from '../utils/http/sseTools.js';
+import { badRequestResponse } from '../utils/http/http.js';
+const llm = llmInstance.getInstance();
 export const getLLMChart = async (req: Request, res: Response): Promise<void> => {
   try {
     const { text } = req.body;
@@ -15,7 +15,7 @@ export const getLLMChart = async (req: Request, res: Response): Promise<void> =>
     sendSSEData(res, { type: 'start' });
 
     // 使用流式响应
-    const stream = llmInstance.chatStream(text);
+    const stream = llm.chatStream(text);
 
     for await (const chunk of stream) {
       // 按照 SSE 格式发送数据

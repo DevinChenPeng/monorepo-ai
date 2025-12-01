@@ -1,4 +1,4 @@
-import { ChromaToolbox } from './utils/chroma.js';
+import { ChromaToolbox } from './utils/langchain/chroma.js';
 
 async function main() {
   const examples = [

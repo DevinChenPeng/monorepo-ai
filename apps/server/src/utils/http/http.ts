@@ -1,5 +1,5 @@
-import type { ResponseData } from '../types/http.types.js';
-import { HTTP_ERROR_MESSAGE, HTTP_STATUS } from '../constants/http.js';
+import type { ResponseData } from '../../types/http.types.js';
+import { HTTP_ERROR_MESSAGE, HTTP_STATUS } from '../../constants/http.js';
 import type { Response } from 'express';
 
 export const successResponse = (data: unknown): ResponseData => {

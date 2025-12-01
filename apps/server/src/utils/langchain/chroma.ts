@@ -3,6 +3,7 @@ import { Chroma, type ChromaLibArgs } from '@langchain/community/vectorstores/ch
 import { OllamaEmbeddings } from '@langchain/ollama';
 import 'dotenv/config';
 import { ChromaClient } from 'chromadb';
+import { URL } from 'node:url';
 
 export interface ChromaToolboxConfig extends Omit<ChromaLibArgs, 'index'> {
   /** 指定集合名称，不同 collection 互相隔离 */
@@ -46,7 +47,31 @@ export class ChromaToolbox {
         baseUrl: process.env.OLLAMA_BASE_URL ?? 'http://localhost:11434',
       });
     this.defaultK = config.defaultK ?? 4;
-    this.chromaClient = new ChromaClient();
+    // 根据配置创建 ChromaClient，避免使用已弃用的 path 参数
+    this.chromaClient = this.createChromaClient();
+  }
+
+  /**
+   * 根据配置创建 ChromaClient，避免使用已弃用的 path 参数
+   */
+  private createChromaClient(): ChromaClient {
+    if (this.config.url) {
+      try {
+        const parsed = new URL(this.config.url);
+        const ssl = parsed.protocol === 'https:';
+        const port = parsed.port ? Number(parsed.port) : ssl ? 443 : 80;
+        return new ChromaClient({
+          host: parsed.hostname,
+          port,
+          ssl,
+        });
+      } catch (error) {
+        console.warn('[ChromaToolbox] 解析 URL 失败，使用默认配置:', error);
+        return new ChromaClient();
+      }
+    }
+    // 如果没有 URL，使用默认配置（本地 localhost:8000）
+    return new ChromaClient();
   }
 
   /**
@@ -95,11 +120,24 @@ export class ChromaToolbox {
    */
   private ensureVectorStore(): Chroma {
     if (!this.vectorStorePromise) {
-      // // 创建/连接 Chroma 集合，并绑定 Ollama 嵌入函数
-      this.vectorStorePromise = new Chroma(
-        this.embeddings, // 嵌入模型（自动将示例转为向量）
-        this.config // 配置（包含集合名称、URL 等）
-      );
+      // 构建 ChromaLibArgs，使用 index（ChromaClient）而不是 url，避免 path 弃用警告
+      const sharedArgs = {
+        collectionName: this.config.collectionName,
+        ...(this.config.collectionMetadata && { collectionMetadata: this.config.collectionMetadata }),
+        ...(this.config.filter && { filter: this.config.filter }),
+        ...(this.config.numDimensions && { numDimensions: this.config.numDimensions }),
+        ...(this.config.collectionConfiguration && { collectionConfiguration: this.config.collectionConfiguration }),
+        ...(this.config.chromaCloudAPIKey && { chromaCloudAPIKey: this.config.chromaCloudAPIKey }),
+        ...(this.config.clientParams && { clientParams: this.config.clientParams }),
+      };
+
+      // 总是使用 index（ChromaClient），避免 LangChain 内部使用 path 参数
+      const chromaArgs: ChromaLibArgs = {
+        ...sharedArgs,
+        index: this.chromaClient,
+      };
+
+      this.vectorStorePromise = new Chroma(this.embeddings, chromaArgs);
     }
     return this.vectorStorePromise;
   }
@@ -111,8 +149,6 @@ export class ChromaToolbox {
    */
   async addDocuments(documents: Document[]): Promise<void> {
     const store = this.ensureVectorStore();
-    console.dir(this);
-
     await store.addDocuments(documents);
   }
 
