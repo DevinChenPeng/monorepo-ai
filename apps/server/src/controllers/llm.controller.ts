@@ -6,52 +6,146 @@ import { badRequestResponse } from '../utils/http/http.js';
 import type { AIMessageChunk, MessageStructure } from '@langchain/core/messages';
 import { SSE_TYPE_ENUMS } from '../types/sse.types.js';
 const llm = llmInstance.getInstance();
+// SSE 流式处理配置
+const SSE_CONFIG = {
+  MIN_CHUNK_SIZE: 10, // 最小数据包大小（字符数）
+  THINK_START_MSG: '深度思考中',
+  THINK_END_MSG: '已完成思考',
+} as const;
+
+/**
+ * 流式处理状态管理
+ */
+interface StreamState {
+  isThinking: boolean;
+  contentBuffer: string;
+  reasoningBuffer: string;
+}
+
+/**
+ * 处理思考内容（reasoning content）
+ */
+const handleReasoningContent = (
+  res: Response,
+  conversation: ReturnType<typeof createConversation>,
+  state: StreamState,
+  chunkId: string | undefined,
+  reasoningContent: string
+): void => {
+  state.reasoningBuffer += reasoningContent;
+
+  // 首次进入思考状态
+  if (!state.isThinking) {
+    state.isThinking = true;
+    sendSSEData(res, {
+      ...conversation,
+      message: { id: chunkId, content: SSE_CONFIG.THINK_START_MSG, type: SSE_TYPE_ENUMS.THINK_START },
+    });
+  }
+
+  // 缓冲区达到最小发送阈值
+  if (state.reasoningBuffer.length >= SSE_CONFIG.MIN_CHUNK_SIZE) {
+    sendSSEData(res, {
+      ...conversation,
+      message: { id: chunkId, content: state.reasoningBuffer, type: SSE_TYPE_ENUMS.THINK },
+    });
+    state.reasoningBuffer = '';
+  }
+};
+
+/**
+ * 结束思考状态
+ */
+const endThinkingState = (
+  res: Response,
+  conversation: ReturnType<typeof createConversation>,
+  state: StreamState,
+  chunkId: string | undefined
+): void => {
+  // 发送剩余的思考内容
+  if (state.reasoningBuffer) {
+    sendSSEData(res, {
+      ...conversation,
+      message: { id: chunkId, content: state.reasoningBuffer, type: SSE_TYPE_ENUMS.THINK },
+    });
+    state.reasoningBuffer = '';
+  }
+
+  // 发送思考结束消息
+  sendSSEData(res, {
+    ...conversation,
+    message: { id: chunkId, content: SSE_CONFIG.THINK_END_MSG, type: SSE_TYPE_ENUMS.THINK_END },
+  });
+  state.isThinking = false;
+};
+
+/**
+ * 处理文本内容（text content）
+ */
+const handleTextContent = (
+  res: Response,
+  conversation: ReturnType<typeof createConversation>,
+  state: StreamState,
+  chunkId: string | undefined,
+  content: string,
+  isFinished: boolean = false
+): void => {
+  if (state.isThinking) return; // 思考状态下不处理文本
+
+  state.contentBuffer += content;
+
+  // 缓冲区达到最小发送阈值或流结束
+  if (state.contentBuffer.length >= SSE_CONFIG.MIN_CHUNK_SIZE || isFinished) {
+    if (state.contentBuffer) {
+      sendSSEData(res, {
+        ...conversation,
+        message: { id: chunkId, content: state.contentBuffer, type: SSE_TYPE_ENUMS.TEXT },
+      });
+      state.contentBuffer = '';
+    }
+  }
+};
+
+/**
+ * 流式响应处理器
+ * @param res - Express Response 对象
+ * @param stream - AI 消息流
+ */
 const streamHanlder = async (res: Response, stream: AsyncGenerator<AIMessageChunk<MessageStructure>, void, unknown>) => {
-  let eventId = 0;
-  // 1.让客户端知道这次发送的数据的基本信息ID
+  // 初始化会话
   const conversation = createConversation();
   sendConversation(res, conversation);
   sendSSEData(res, { ...conversation, message: { type: SSE_TYPE_ENUMS.START } });
-  /**
-   * 2.发送开始思考
-   * 发送最小数据包为10个字符以减少发送数量
-   */
-  let isThinking = false;
-  let contentText = '',
-    reasoningContent = '';
+
+  // 初始化状态
+  const state: StreamState = {
+    isThinking: false,
+    contentBuffer: '',
+    reasoningBuffer: '',
+  };
+
+  // 处理流式数据
   for await (const chunk of stream) {
-    const reasoning_content = chunk.additional_kwargs.reasoning_content;
-    const { content, id, response_metadata } = chunk;
-    if (reasoning_content && !content) {
-      reasoningContent += reasoning_content;
-      if (!isThinking) {
-        isThinking = true;
-        sendSSEData(res, { ...conversation, message: { id, content: '深度思考中', type: SSE_TYPE_ENUMS.THINK_START } });
-      }
-      if (reasoningContent.length > 10) {
-        sendSSEData(res, { ...conversation, message: { id, content: reasoningContent, type: SSE_TYPE_ENUMS.THINK } });
-        reasoningContent = '';
-      }
-    } else {
-      if (reasoningContent) {
-        sendSSEData(res, { ...conversation, message: { id, content: reasoningContent, type: SSE_TYPE_ENUMS.THINK } });
-        reasoningContent = '';
-      }
-      sendSSEData(res, { ...conversation, message: { id, content: '已完成思考', type: SSE_TYPE_ENUMS.THINK_END } });
-      isThinking = false;
+    const { content, id, response_metadata, additional_kwargs } = chunk;
+    const reasoningContent = additional_kwargs?.reasoning_content as string | undefined;
+
+    // 处理思考内容（有推理内容且无正文内容）
+    if (reasoningContent && !content) {
+      handleReasoningContent(res, conversation, state, id as string | undefined, reasoningContent);
     }
-    if (content && !isThinking) {
-      contentText += content;
-      if (contentText.length > 10) {
-        sendSSEData(res, { ...conversation, message: { id, content: contentText, type: SSE_TYPE_ENUMS.TEXT } });
-        contentText = '';
-      }
+    // 从思考状态切换到正文状态
+    else if (state.isThinking) {
+      endThinkingState(res, conversation, state, id as string | undefined);
     }
-    if (response_metadata.finish_reason === 'stop' && contentText) {
-      sendSSEData(res, { ...conversation, message: { id, content: contentText, type: SSE_TYPE_ENUMS.TEXT } });
-      contentText = '';
+
+    // 处理正文内容
+    if (content) {
+      const isFinished = response_metadata?.finish_reason === 'stop';
+      handleTextContent(res, conversation, state, id as string | undefined, content.toString(), isFinished);
     }
   }
+
+  // 发送结束消息
   sendSSEData(res, { ...conversation, message: { type: SSE_TYPE_ENUMS.END } });
 };
 export const getLLMChart = async (req: Request, res: Response): Promise<void> => {
