@@ -43,12 +43,12 @@ const streamHanlder = async (res: Response, stream: AsyncGenerator<AIMessageChun
     if (content && !isThinking) {
       contentText += content;
       if (contentText.length > 10) {
-        sendSSEData(res, { ...conversation, message: { id, content: contentText, type: SSE_TYPE_ENUMS.THINK } });
+        sendSSEData(res, { ...conversation, message: { id, content: contentText, type: SSE_TYPE_ENUMS.TEXT } });
         contentText = '';
       }
     }
     if (response_metadata.finish_reason === 'stop' && contentText) {
-      sendSSEData(res, { ...conversation, message: { id, content: contentText, type: SSE_TYPE_ENUMS.THINK } });
+      sendSSEData(res, { ...conversation, message: { id, content: contentText, type: SSE_TYPE_ENUMS.TEXT } });
       contentText = '';
     }
   }
