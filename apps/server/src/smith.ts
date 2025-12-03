@@ -2,7 +2,9 @@ import llmInstance from './utils/langchain/llm.js';
 
 async function main() {
   const llm = llmInstance.getInstance();
-  const data = await llm.chat('ollama');
-  console.log(data);
+  const data = llm.chatStream('ollama');
+  for await (const chunk of data) {
+    console.log(chunk);
+  }
 }
 main();
