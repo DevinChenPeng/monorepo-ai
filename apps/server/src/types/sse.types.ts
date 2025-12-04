@@ -26,3 +26,12 @@ export interface Conversation {
   messageId: string;
   type: SSE_TYPE_ENUMS;
 }
+
+/**
+ * 流式处理状态管理
+ */
+export interface StreamState {
+  isThinking: boolean;
+  contentBuffer: string;
+  reasoningBuffer: string;
+}
