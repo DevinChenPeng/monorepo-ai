@@ -70,9 +70,7 @@ class LLM extends ChatDeepSeek {
     // 将message放入Chroma进行检索
     const messages: BaseMessage[] = await setMessage(message, this.enableRAG, systemPrompt);
     const stream = await this.stream(messages);
-    let isThinking = false;
     for await (const chunk of stream) {
-      console.log(chunk);
       yield chunk;
     }
   }
