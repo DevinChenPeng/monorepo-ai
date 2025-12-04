@@ -11,7 +11,6 @@ export enum CONVERSATION_TYPE_ENUMS {
   ASK = 'ask',
 }
 /**
- * Conversation
  * @description 会话接口定义了会话对象的结构。
  * @param  conversationId - 会话ID
  * @param  conversationType - 会话类型
@@ -29,6 +28,9 @@ export interface Conversation {
 
 /**
  * 流式处理状态管理
+ * @param  isThinking - 是否正在思考
+ * @param  contentBuffer - 正文内容缓冲区
+ * @param  reasoningBuffer - 思考内容缓冲区
  */
 export interface StreamState {
   isThinking: boolean;
