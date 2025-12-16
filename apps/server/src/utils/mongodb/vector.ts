@@ -55,16 +55,43 @@ export class MongodbVectorTool {
     this.collection = this.mongoClient.getCollection(
       this.config.collectionName || process.env.MONGODB_DB_VECTOR_COLLECTION_NAME || 'vector_collection'
     );
-    // this.collection.createIndex({ embedding: 'text' });
     // 初始化向量存储
     this.vectorStore = new MongoDBAtlasVectorSearch(this.embeddings, {
-      collection: this.collection,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      collection: this.collection as any,
       indexName: 'vector_index',
-      textKey: 'content',
+      textKey: 'text',
       embeddingKey: 'embedding',
     });
   }
-
+  getCollection() {
+    return this.collection;
+  }
+  static async initSearchIndex(
+    collection: Collection | null,
+    definition = {
+      fields: [
+        {
+          type: 'vector',
+          numDimensions: 768,
+          path: 'embedding',
+          similarity: 'cosine',
+        },
+      ],
+    }
+  ) {
+    if (collection) {
+      const indexes = await collection.listSearchIndexes('vector_index').toArray();
+      if (indexes.length === 0) {
+        const index = {
+          name: 'vector_index',
+          type: 'vectorSearch',
+          definition: definition,
+        };
+        collection.createSearchIndex(index);
+      }
+    }
+  }
   /**
    * 确保向量工具已初始化
    * @returns Promise<void>
@@ -137,33 +164,6 @@ export class MongodbVectorTool {
       throw new Error('Vector store not initialized');
     }
     return this.vectorStore.similaritySearch(query, k);
-  }
-
-  async testNativeVectorSearch() {
-    if (this.collection) {
-      // 取一条已入库文档的向量作为查询向量（模拟用户输入的嵌入向量）
-      const sampleDoc = await this.collection.findOne();
-      const queryVector = sampleDoc?.embedding; // 用已有向量测试，理论上能匹配到自身
-      // 执行原生向量检索（适配 Atlas/$vectorSearch 或本地/$near）
-      console.log(queryVector);
-      let results;
-      results = await this.collection
-        .aggregate([
-          {
-            $vectorSearch: {
-              index: 'vector_index',
-              path: 'embedding',
-              queryVector: queryVector,
-              numCandidates: 100,
-              limit: 5,
-            },
-          },
-          { $project: { content: 1, score: { $meta: 'vectorSearchScore' } } },
-        ])
-        .toArray();
-
-      console.log('原生向量检索结果：', results);
-    }
   }
 
   /**
