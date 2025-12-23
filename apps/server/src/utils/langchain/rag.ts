@@ -1,23 +1,23 @@
-import { ChromaToolbox } from './chroma.js';
+import { MongodbVectorTool } from '../mongodb/vector.js';
 import { formatContext, formatRagPrompt } from '../tools/prompt.js';
 export interface RAGConfig {
-  /** Chroma 工具箱实例，用于向量检索 */
-  chromaToolbox?: ChromaToolbox;
+  /** MongoDB 向量工具实例，用于向量检索 */
+  mongodbVectorTool?: MongodbVectorTool;
   /** 检索的文档数量 */
   ragK?: number;
   /** 相似度阈值，低于此值的文档将被过滤（范围 0-1，值越大要求越严格） */
   similarityThreshold?: number;
 }
 export class RAG {
-  private readonly chromaToolbox: ChromaToolbox | undefined;
+  private readonly mongodbVectorTool: MongodbVectorTool | undefined;
   private readonly ragK: number;
   private readonly similarityThreshold: number;
   constructor(config: RAGConfig) {
-    // 1.初始化ChromaToolbox
-    if (config.chromaToolbox) {
-      this.chromaToolbox = config.chromaToolbox;
+    // 1.初始化 MongoDB 向量工具
+    if (config.mongodbVectorTool) {
+      this.mongodbVectorTool = config.mongodbVectorTool;
     } else {
-      this.chromaToolbox = ChromaToolbox.fromEnv();
+      this.mongodbVectorTool = new MongodbVectorTool({});
     }
     // 2.初始化检索的文档数量
     this.ragK = config.ragK ?? 3;
@@ -31,12 +31,12 @@ export class RAG {
    * @returns 上下文字符串，如果没有相关文档则返回空字符串
    */
   async retrieve(query: string, k?: number): Promise<string> {
-    if (!this.chromaToolbox) {
-      throw new Error('ChromaToolbox 实例未初始化');
+    if (!this.mongodbVectorTool) {
+      throw new Error('MongodbVectorTool 实例未初始化');
     }
 
     // 使用 similaritySearchWithScore 获取文档和相似度分数
-    const docsWithScores = await this.chromaToolbox.similaritySearchWithScore(query, k || this.ragK);
+    const docsWithScores = await this.mongodbVectorTool.similaritySearchWithScore(query, k || this.ragK);
 
     // 根据相似度阈值过滤文档
     const relevantDocs = docsWithScores
@@ -59,10 +59,10 @@ export class RAG {
   }
   /**
    * 检查 RAG 是否可用
-   * @returns 如果 ChromaToolbox 已初始化则返回 true
+   * @returns 如果 MongoDB 向量工具已初始化则返回 true
    */
   isAvailable(): boolean {
-    return this.chromaToolbox !== undefined;
+    return this.mongodbVectorTool !== undefined;
   }
 }
 
