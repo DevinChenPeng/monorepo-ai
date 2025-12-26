@@ -244,3 +244,4 @@ class MongoDBUtil {
 }
 
 export default MongoDBUtil;
+export { MongoChatHistoryTool } from './chatHistory.js';

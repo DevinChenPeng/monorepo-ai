@@ -19,6 +19,8 @@ export class RAG {
     } else {
       this.mongodbVectorTool = new MongodbVectorTool({});
     }
+    // 初始化索引
+    MongodbVectorTool.initSearchIndex(this.mongodbVectorTool.getCollection());
     // 2.初始化检索的文档数量
     this.ragK = config.ragK ?? 3;
     // 3.初始化相似度阈值（默认 0.3，可根据实际情况调整）
