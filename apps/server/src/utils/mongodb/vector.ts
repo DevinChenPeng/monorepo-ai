@@ -177,7 +177,8 @@ export class MongodbVectorTool {
     if (!this.vectorStore) {
       throw new Error('Vector store not initialized');
     }
-    console.log(this.vectorStore);
+    // 将返回结果按照得分排序
+
     return this.vectorStore.similaritySearchWithScore(query, k);
   }
 
